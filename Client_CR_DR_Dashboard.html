@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Client CR/DR Ledger Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #080d1a; --card: #0f1629; --border: #1a2540;
+    --text: #e8edf8; --muted: #556080; --accent: #00e5a0;
+    --red: #ff5c7a; --blue: #4da6ff; --yellow: #ffc532; --pink: #e054f0;
+    --pvt: #00e5a0; --par: #4da6ff; --llp: #ff5c7a; --prop: #ffc532;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Syne', sans-serif; font-size: 13px; min-height: 100vh; }
+  
+  /* HEADER */
+  .header { background: linear-gradient(135deg,#0c1428 0%,#080d1a 100%); border-bottom: 1px solid var(--border); padding: 16px 28px; display: flex; align-items: center; justify-content: space-between; }
+  .header-left .sub { font-size: 9px; letter-spacing: 4px; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
+  .header-left h1 { font-size: 22px; font-weight: 800; color: var(--text); letter-spacing: -0.5px; }
+  .header-left h1 span { color: var(--accent); }
+  .header-stats { display: flex; gap: 10px; }
+  .hstat { background: #111b30; border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; text-align: center; }
+  .hstat .val { font-size: 17px; font-weight: 700; color: var(--accent); font-family: 'Fira Code', monospace; }
+  .hstat .lbl { font-size: 9px; color: var(--muted); letter-spacing: 1px; margin-top: 2px; }
+
+  /* TABS */
+  .tabs { display: flex; border-bottom: 1px solid var(--border); background: #080d1a; padding: 0 28px; overflow-x: auto; }
+  .tab { background: none; border: none; cursor: pointer; padding: 12px 20px; font-size: 11px; font-family: 'Syne', sans-serif; font-weight: 600; color: var(--muted); border-bottom: 2px solid transparent; transition: all .2s; white-space: nowrap; letter-spacing: 1px; text-transform: uppercase; }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab:hover:not(.active) { color: var(--text); }
+
+  /* CONTENT */
+  .content { padding: 22px 28px; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* CARDS */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; }
+  .card-title { font-size: 9px; color: var(--muted); letter-spacing: 3px; text-transform: uppercase; margin-bottom: 14px; }
+  
+  /* KPI GRID */
+  .kpi-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 16px; }
+  .kpi { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; border-top: 3px solid; position: relative; overflow: hidden; }
+  .kpi::after { content: attr(data-icon); position: absolute; right: 14px; top: 12px; font-size: 30px; opacity: .12; }
+  .kpi .label { font-size: 9px; color: var(--muted); letter-spacing: 3px; text-transform: uppercase; margin-bottom: 8px; }
+  .kpi .value { font-size: 22px; font-weight: 800; font-family: 'Fira Code', monospace; }
+  .kpi .sub { font-size: 10px; color: var(--muted); margin-top: 5px; }
+
+  /* 2-col, 3-col grids */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  .grid-14 { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; margin-bottom: 14px; }
+  .grid-25 { display: grid; grid-template-columns: 2fr 1fr; gap: 14px; margin-bottom: 14px; }
+
+  /* CHART WRAPPER */
+  .chart-wrap { position: relative; }
+
+  /* ENTITY CARDS */
+  .entity-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; border-left: 4px solid; }
+  .entity-name { font-size: 14px; font-weight: 700; margin-bottom: 12px; }
+  .entity-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-bottom: 10px; }
+  .entity-stat { background: #080d1a; border-radius: 6px; padding: 8px 10px; }
+  .entity-stat .el { font-size: 9px; color: var(--muted); margin-bottom: 3px; }
+  .entity-stat .ev { font-size: 15px; font-weight: 700; font-family: 'Fira Code', monospace; }
+  .bar-bg { background: #1a2540; border-radius: 4px; height: 6px; overflow: hidden; margin-bottom: 5px; }
+  .bar-fill { height: 100%; border-radius: 4px; transition: width .8s cubic-bezier(.4,0,.2,1); }
+  .entity-foot { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); }
+
+  /* TABLE */
+  .tbl-controls { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+  .tbl-controls input { background: #111b30; border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 8px 14px; font-size: 12px; font-family: 'Syne', sans-serif; outline: none; flex: 1; min-width: 180px; }
+  .tbl-controls input::placeholder { color: var(--muted); }
+  .filter-btn { background: #111b30; border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 7px 13px; cursor: pointer; font-family: 'Syne', sans-serif; font-size: 11px; font-weight: 600; transition: all .15s; }
+  .filter-btn.active { background: var(--accent); color: #000; border-color: var(--accent); }
+  .filter-btn:hover:not(.active) { color: var(--text); }
+  .table-wrap { border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
+  .tbl-scroll { overflow-x: auto; max-height: 480px; overflow-y: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead tr { background: #111b30; position: sticky; top: 0; z-index: 2; }
+  th { padding: 10px 14px; text-align: left; color: var(--muted); font-size: 9px; letter-spacing: 2px; text-transform: uppercase; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  th:hover { color: var(--text); }
+  td { padding: 9px 14px; border-bottom: 1px solid #111b30; white-space: nowrap; }
+  tbody tr:hover td { background: #111b30; }
+  tbody tr:last-child td { border-bottom: none; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 9px; font-weight: 700; letter-spacing: 1px; }
+  .tbl-footer { padding: 10px 14px; background: #0c1428; border-top: 1px solid var(--border); font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; }
+
+  /* TOP-N TOGGLE */
+  .topn-btns { display: flex; gap: 8px; margin-bottom: 12px; }
+  .topn-btn { background: #111b30; border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 6px 14px; cursor: pointer; font-family: 'Syne', sans-serif; font-size: 11px; font-weight: 600; transition: all .15s; }
+  .topn-btn:hover:not(.active) { color: var(--text); }
+
+  /* INSIGHT BOX */
+  .insight { border-radius: 8px; padding: 14px 16px; font-size: 12px; line-height: 1.7; margin-bottom: 14px; }
+
+  /* DIST CARDS */
+  .dist-grid { display: grid; grid-template-columns: repeat(5,1fr); gap: 10px; }
+  .dist-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px; text-align: center; border-top: 3px solid; }
+  .dist-card .dr { font-size: 10px; color: var(--muted); margin-bottom: 6px; }
+  .dist-card .dv { font-size: 20px; font-weight: 800; font-family: 'Fira Code', monospace; }
+  .dist-card .dp { font-size: 10px; margin-top: 4px; }
+
+  /* ANIMATIONS */
+  @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+  .panel.active > * { animation: fadeUp .3s ease both; }
+  .panel.active > *:nth-child(2) { animation-delay: .05s; }
+  .panel.active > *:nth-child(3) { animation-delay: .1s; }
+  .panel.active > *:nth-child(4) { animation-delay: .15s; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #080d1a; }
+  ::-webkit-scrollbar-thumb { background: #1a2540; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-left">
+    <div class="sub">Financial Analytics · 2024</div>
+    <h1>Client Ledger <span>CR/DR</span> Dashboard</h1>
+  </div>
+  <div class="header-stats">
+    <div class="hstat"><div class="val">14,038</div><div class="lbl">Total Rows</div></div>
+    <div class="hstat"><div class="val">360</div><div class="lbl">Accounts</div></div>
+    <div class="hstat"><div class="val">4</div><div class="lbl">Entity Types</div></div>
+    <div class="hstat"><div class="val" style="color:var(--accent)">₹529 Cr</div><div class="lbl">Net Balance</div></div>
+  </div>
+</div>
+
+<!-- TABS -->
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('overview',this)">Overview</button>
+  <button class="tab" onclick="switchTab('credits',this)">Top Credits</button>
+  <button class="tab" onclick="switchTab('debits',this)">Top Debits</button>
+  <button class="tab" onclick="switchTab('entities',this)">Entity Analysis</button>
+  <button class="tab" onclick="switchTab('distribution',this)">Distribution</button>
+  <button class="tab" onclick="switchTab('alldata',this)">All 360 Accounts</button>
+</div>
+
+<!-- CONTENT -->
+<div class="content">
+
+  <!-- ── OVERVIEW ── -->
+  <div class="panel active" id="panel-overview">
+    <div class="kpi-grid">
+      <div class="kpi" style="border-top-color:var(--accent);color:var(--accent)" data-icon="↑">
+        <div class="label">Total Credit</div>
+        <div class="value">₹566.84 Cr</div>
+        <div class="sub">11,220 entries across all accounts</div>
+      </div>
+      <div class="kpi" style="border-top-color:var(--red);color:var(--red)" data-icon="↓">
+        <div class="label">Total Debit</div>
+        <div class="value">₹36.92 Cr</div>
+        <div class="sub">2,818 entries across all accounts</div>
+      </div>
+      <div class="kpi" style="border-top-color:var(--blue);color:var(--blue)" data-icon="≈">
+        <div class="label">Net Balance</div>
+        <div class="value">₹529.92 Cr</div>
+        <div class="sub">Strong credit surplus position</div>
+      </div>
+      <div class="kpi" style="border-top-color:var(--yellow);color:var(--yellow)" data-icon="∅">
+        <div class="label">Nil Entries</div>
+        <div class="value">1,735</div>
+        <div class="sub">Zero-amount rows (12.4% of total)</div>
+      </div>
+    </div>
+
+    <div class="grid-25">
+      <div class="card">
+        <div class="card-title">CR vs DR Amount by Entity Type</div>
+        <div class="chart-wrap"><canvas id="chartEntityBar" height="200"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Credit / Debit Entry Split</div>
+        <div class="chart-wrap"><canvas id="chartDonut" height="200"></canvas></div>
+        <div style="display:flex;justify-content:center;gap:20px;margin-top:10px">
+          <div style="text-align:center"><div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted)"><span style="width:8px;height:8px;border-radius:2px;background:var(--accent);display:inline-block"></span>Credit</div><div style="font-size:16px;font-weight:800;color:var(--accent);font-family:'Fira Code'">11,220</div><div style="font-size:10px;color:var(--muted)">79.9%</div></div>
+          <div style="text-align:center"><div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted)"><span style="width:8px;height:8px;border-radius:2px;background:var(--red);display:inline-block"></span>Debit</div><div style="font-size:16px;font-weight:800;color:var(--red);font-family:'Fira Code'">2,818</div><div style="font-size:10px;color:var(--muted)">20.1%</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Amount Distribution Across All 14,038 Rows</div>
+        <div class="chart-wrap"><canvas id="chartDist" height="180"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Entry Count by Entity Type</div>
+        <div class="chart-wrap"><canvas id="chartPie" height="180"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CREDITS ── -->
+  <div class="panel" id="panel-credits">
+    <div class="topn-btns">
+      <button class="topn-btn active" onclick="setCrTop(5,this)">Top 5</button>
+      <button class="topn-btn" onclick="setCrTop(10,this)">Top 10</button>
+      <button class="topn-btn" onclick="setCrTop(15,this)">Top 15</button>
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-title">Highest Credit Clients — Aggregated from 14,038 Rows</div>
+      <div class="chart-wrap"><canvas id="chartTopCR" height="280"></canvas></div>
+    </div>
+    <div class="grid-3" id="top3cr"></div>
+  </div>
+
+  <!-- ── DEBITS ── -->
+  <div class="panel" id="panel-debits">
+    <div class="topn-btns">
+      <button class="topn-btn active" onclick="setDrTop(5,this)">Top 5</button>
+      <button class="topn-btn" onclick="setDrTop(10,this)">Top 10</button>
+      <button class="topn-btn" onclick="setDrTop(15,this)">Top 15</button>
+    </div>
+    <div class="insight" style="background:#1a0d12;border:1px solid #3d1020;color:#ff5c7a;margin-bottom:14px">
+      ⚠ <strong>Key Insight:</strong> <span style="color:#e8edf8">100% of top debit accounts are <strong style="color:var(--yellow)">LLPs</strong> — predominantly IT, cloud & consulting firms. LLPs owe <strong style="color:var(--red)">₹30.63 Cr</strong> (83% of all DR). Priority follow-up recommended.</span>
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-title">Highest Debit Clients — Aggregated from 14,038 Rows</div>
+      <div class="chart-wrap"><canvas id="chartTopDR" height="280"></canvas></div>
+    </div>
+    <div class="grid-3" id="top3dr"></div>
+  </div>
+
+  <!-- ── ENTITIES ── -->
+  <div class="panel" id="panel-entities">
+    <div class="grid-2" id="entityCards"></div>
+    <div class="card">
+      <div class="card-title">CR vs DR Comparison Across Entity Types</div>
+      <div class="chart-wrap"><canvas id="chartEntityCompare" height="180"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ── DISTRIBUTION ── -->
+  <div class="panel" id="panel-distribution">
+    <div class="dist-grid" style="margin-bottom:14px">
+      <div class="dist-card" style="border-top-color:var(--yellow)"><div class="dr">₹0 (Nil)</div><div class="dv" style="color:var(--yellow)">1,735</div><div class="dp" style="color:var(--muted)">12.4% of rows</div></div>
+      <div class="dist-card" style="border-top-color:var(--blue)"><div class="dr">&lt; ₹10K</div><div class="dv" style="color:var(--blue)">2,856</div><div class="dp" style="color:var(--muted)">20.3% of rows</div></div>
+      <div class="dist-card" style="border-top-color:var(--pink)"><div class="dr">₹10K – ₹1L</div><div class="dv" style="color:var(--pink)">1,378</div><div class="dp" style="color:var(--muted)">9.8% of rows</div></div>
+      <div class="dist-card" style="border-top-color:var(--accent)"><div class="dr">₹1L – ₹10L</div><div class="dv" style="color:var(--accent)">6,361</div><div class="dp" style="color:var(--muted)">45.3% of rows</div></div>
+      <div class="dist-card" style="border-top-color:#a78bfa"><div class="dr">₹10L – ₹1Cr</div><div class="dv" style="color:#a78bfa">1,708</div><div class="dp" style="color:var(--muted)">12.2% of rows</div></div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Amount Range Distribution (All 14,038 Rows)</div>
+        <div class="chart-wrap"><canvas id="chartDistBar" height="220"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Entity Type Share of Total Entries</div>
+        <div class="chart-wrap"><canvas id="chartEntityPie" height="220"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── ALL DATA ── -->
+  <div class="panel" id="panel-alldata">
+    <div class="tbl-controls">
+      <input type="text" id="searchInput" placeholder="🔍  Search by client name or account number..." oninput="filterTable()"/>
+      <button class="filter-btn active" onclick="setFilter('ALL',this)">All</button>
+      <button class="filter-btn" onclick="setFilter('LLP',this)">LLP</button>
+      <button class="filter-btn" onclick="setFilter('PARTNERSHIP',this)">Partnership</button>
+      <button class="filter-btn" onclick="setFilter('PRIVATE LIMITED',this)">Pvt. Ltd.</button>
+      <button class="filter-btn" onclick="setFilter('PROPRIETOR',this)">Proprietor</button>
+    </div>
+    <div class="table-wrap">
+      <div class="tbl-scroll">
+        <table id="mainTable">
+          <thead>
+            <tr>
+              <th onclick="sortBy('idx')">#</th>
+              <th onclick="sortBy('acct')">Account No.</th>
+              <th onclick="sortBy('name')">Client Name ↕</th>
+              <th onclick="sortBy('status')">Entity Type</th>
+              <th onclick="sortBy('cr')">Total CR ↕</th>
+              <th onclick="sortBy('dr')">Total DR ↕</th>
+              <th onclick="sortBy('net')">Net Balance ↕</th>
+              <th onclick="sortBy('entries')">Entries ↕</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+      <div class="tbl-footer">
+        <span id="tbl-count">Showing 360 of 360 accounts</span>
+        <span>Source: 14,038 raw ledger entries · All figures aggregated</span>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /content -->
+
+<script>
+// ── ALL DATA ──────────────────────────────────────────────────────────────
+const ALL_ACCOUNTS = [["502634567", "TITAN STRUCTURES INDIA", "LLP", 95655600.0, 0.0, 95655600.0, 51], ["502956789", "ZODIAC RETAIL CHAINS", "PRIVATE LIMITED", 92115000.0, 0.0, 92115000.0, 50], ["502734567", "GALAXY INFRA VENTURES", "PARTNERSHIP", 83910338.25, 0.0, 83910338.25, 51], ["502656789", "SUNRISE PAPER PRODUCTS", "PRIVATE LIMITED", 82310200.0, 0.0, 82310200.0, 74], ["502589012", "ORBIT POWER SYSTEMS", "LLP", 78795000.0, 0.0, 78795000.0, 51], ["503156789", "SUNRICH PAPER MILLS", "PRIVATE LIMITED", 77127300.0, 0.0, 77127300.0, 51], ["503234567", "EASTCOAST INFRA PROJECTS", "PARTNERSHIP", 72690338.25, 0.0, 72690338.25, 51], ["502456789", "MEGASTAR RETAIL HUB", "PRIVATE LIMITED", 72027300.0, 0.0, 72027300.0, 51], ["503134567", "TITANIUM STRUCTURES", "LLP", 70155600.0, 0.0, 70155600.0, 51], ["505234567", "TITAN INFRA PROJECTS", "LLP", 67170400.0, 0.0, 67170400.0, 34], ["504434567", "TITAN INFRA STRUCTURES", "LLP", 63770400.0, 0.0, 63770400.0, 34], ["503089012", "ORBITAL SOLAR SYSTEMS", "LLP", 63750000.0, 0.0, 63750000.0, 50], ["502234567", "GREENVALLEY PROJECTS", "PARTNERSHIP", 62280025.0, 0.0, 62280025.0, 50], ["503634567", "TITAN BUILD STRUCTURES", "LLP", 60370400.0, 0.0, 60370400.0, 34], ["502934567", "VECTOR INDUSTRIAL SUPPLIES", "LLP", 58780000.0, 0.0, 58780000.0, 50], ["502389012", "ASTRAL ENERGY VENTURES", "LLP", 58395000.0, 0.0, 58395000.0, 51], ["504256789", "ZENITH RETAIL MART", "PRIVATE LIMITED", 58218200.0, 0.0, 58218200.0, 34], ["503456789", "ZENITH RETAIL STORES", "PRIVATE LIMITED", 55903500.0, 0.0, 55903500.0, 45], ["503956789", "ZENMART RETAIL INDIA", "PRIVATE LIMITED", 55838200.0, 0.0, 55838200.0, 34], ["505056789", "ZENITH MEGA RETAIL", "PRIVATE LIMITED", 54818200.0, 0.0, 54818200.0, 34], ["505334567", "EASTERN SKY DEVELOPERS", "PARTNERSHIP", 53560225.5, 0.0, 53560225.5, 34], ["504756789", "ZENMART INDIA RETAIL", "PRIVATE LIMITED", 52438200.0, 0.0, 52438200.0, 34], ["503734567", "EASTERN CONSTRUCTIONS", "PARTNERSHIP", 51860225.5, 0.0, 51860225.5, 34], ["502889012", "EVEREST POWER CONTROLS", "LLP", 50750000.0, 0.0, 50750000.0, 50], ["502678901", "NORTHSTAR SHIPPING", "PARTNERSHIP", 50534676.0, 0.0, 50534676.0, 51], ["502778901", "METROLINE TRANSPORTS", "PARTNERSHIP", 49758150.0, 0.0, 49758150.0, 51], ["501989012", "SKYHIGH AVIATION SUPPORT", "PRIVATE LIMITED", 48420000.0, 0.0, 48420000.0, 36], ["503434567", "VECTOR MACHINE TOOLS", "LLP", 48402000.0, 0.0, 48402000.0, 45], ["504189012", "POWERHOUSE ELECTRONICS", "LLP", 48110000.0, 0.0, 48110000.0, 34], ["502601234", "ZENCORE ENGINEERING WORKS", "PARTNERSHIP", 47205600.0, 0.0, 47205600.0, 51], ["503045678", "URBANPRINT MEDIA WORKS", "PRIVATE LIMITED", 46449950.0, 0.0, 46449950.0, 50], ["503201234", "ARCADIA FURNISHINGS", "PARTNERSHIP", 46427340.0, 0.0, 46427340.0, 51], ["502256789", "MATRIX PHARMA SOLUTIONS", "PRIVATE LIMITED", 45615000.0, 0.0, 45615000.0, 50], ["504534567", "EASTERN SKYLINE DEVELOPERS", "PARTNERSHIP", 45060225.5, 0.0, 45060225.5, 34], ["504389012", "SOLARMAX POWER SYSTEMS", "LLP", 45050000.0, 0.0, 45050000.0, 34], ["502912345", "HARMONY DAIRY FARMS", "PRIVATE LIMITED", 44772512.5, 0.0, 44772512.5, 50], ["502434567", "STERLING AUTO COMPONENTS", "LLP", 44655600.0, 0.0, 44655600.0, 51], ["503656789", "SUNGLOW PAPER INDUSTRIES", "PRIVATE LIMITED", 44618200.0, 0.0, 44618200.0, 34], ["503523456", "GOLDEN MILK FOODS", "PROPRIETOR", 44260545.0, 0.0, 44260545.0, 50], ["504834567", "EASTERN INFRA VENTURES", "PARTNERSHIP", 43701585.5, 0.0, 43701585.5, 34], ["503934567", "VECTOR HEAVY MACHINERY", "LLP", 43370400.0, 0.0, 43370400.0, 34], ["502545678", "METROPRINT SOLUTIONS", "PRIVATE LIMITED", 41768949.0, 0.0, 41768949.0, 51], ["505189012", "SOLARTECH ENERGY SYSTEMS", "LLP", 41650000.0, 0.0, 41650000.0, 34], ["502701234", "ARISTO FURNITURE MART", "PARTNERSHIP", 41327340.0, 0.0, 41327340.0, 51], ["503389012", "POWERGRID SYSTEMS", "LLP", 41175000.0, 0.0, 41175000.0, 45], ["504456789", "SUNGLOW PAPER MILLS", "PRIVATE LIMITED", 40198200.0, 0.0, 40198200.0, 34], ["502712345", "SILVERPEAK MINERALS", "PRIVATE LIMITED", 40081920.0, 0.0, 40081920.0, 51], ["504034567", "EASTERN HEIGHTS INFRA", "PARTNERSHIP", 39965327.2, 0.0, 39965327.2, 34], ["503589012", "SOLARIS POWERTECH", "LLP", 39950000.0, 0.0, 39950000.0, 34], ["502978901", "OMKAR FREIGHT CARRIERS", "PARTNERSHIP", 39543800.0, 0.0, 39543800.0, 50], ["504989012", "POWERTECH ELECTRONICS", "LLP", 38250000.0, 0.0, 38250000.0, 34], ["505256789", "SUNPAPER INDUSTRIES", "PRIVATE LIMITED", 36798200.0, 0.0, 36798200.0, 34], ["503256789", "MEDICARE PHARMA INDIA", "PRIVATE LIMITED", 36576000.0, 0.0, 36576000.0, 45], ["504734567", "VECTOR HEAVY EQUIPMENTS", "LLP", 36570400.0, 0.0, 36570400.0, 34], ["502501234", "SILVER OAK REALTORS", "PARTNERSHIP", 36227340.0, 0.0, 36227340.0, 51], ["503545678", "URBAN MEDIA PRINTS", "PRIVATE LIMITED", 35949950.0, 0.0, 35949950.0, 50], ["503412345", "GREENFIELD DAIRY PRODUCTS", "PRIVATE LIMITED", 35795261.25, 0.0, 35795261.25, 45], ["503101234", "ZENMAX FABRICATION WORKS", "PARTNERSHIP", 35780000.0, 0.0, 35780000.0, 50], ["503178901", "NORTHPOINT SHIPPING", "PARTNERSHIP", 35234676.0, 0.0, 35234676.0, 51], ["503478901", "OM TRANS LOGISTICS", "PARTNERSHIP", 35234676.0, 0.0, 35234676.0, 51], ["502801234", "OMEGA TEXTILE MILLS", "PARTNERSHIP", 34697340.0, 0.0, 34697340.0, 51], ["502278901", "ROYAL INDIA LOGISTICS", "PARTNERSHIP", 34543800.0, 0.0, 34543800.0, 50], ["505034567", "VECTOR INDUSTRIAL TOOLS", "LLP", 34530400.0, 0.0, 34530400.0, 34], ["503023456", "GOLDSTAR MILK PRODUCTS", "PROPRIETOR", 34260545.0, 0.0, 34260545.0, 50], ["505101234", "WESTERN MEADOW BUILDERS", "PARTNERSHIP", 33671560.0, 0.0, 33671560.0, 34], ["504234567", "VECTOR PRECISION TOOLS", "LLP", 33170400.0, 0.0, 33170400.0, 34], ["503212345", "SILVERTONE FABRICS", "PRIVATE LIMITED", 32941920.0, 0.0, 32941920.0, 51], ["502612345", "AURORA PACKAGING INDUSTRIES", "PRIVATE LIMITED", 32940402.75, 0.0, 32940402.75, 51], ["505312345", "SILVER PEAK POLYMERS", "PRIVATE LIMITED", 32161280.0, 0.0, 32161280.0, 34], ["504012345", "SILVERCREST INDUSTRIES", "PRIVATE LIMITED", 32137140.0, 0.0, 32137140.0, 34], ["502401234", "GOLDLINE JEWELS", "PARTNERSHIP", 31905600.0, 0.0, 31905600.0, 51], ["504878901", "TRANSASIA LOGISTICS", "PARTNERSHIP", 31471760.0, 0.0, 31471760.0, 34], ["504556789", "MEDICURE PHARMA INDIA", "PRIVATE LIMITED", 31035200.0, 0.0, 31035200.0, 34], ["503756789", "MEDIQUICK PHARMA", "PRIVATE LIMITED", 31035200.0, 0.0, 31035200.0, 34], ["504301234", "WESTCOAST BUILDERS", "PARTNERSHIP", 30951560.0, 0.0, 30951560.0, 34], ["504512345", "SILVEROAK POLYMERS", "PRIVATE LIMITED", 30461280.0, 0.0, 30461280.0, 34], ["503678901", "NORTHWIND SHIPPING", "PARTNERSHIP", 30289784.0, 0.0, 30289784.0, 34], ["505556789", "ZENMART RETAIL STORES", "PRIVATE LIMITED", 28846000.0, 0.0, 28846000.0, 20], ["503712345", "SILVERLINE POLYMERS", "PRIVATE LIMITED", 28761280.0, 0.0, 28761280.0, 34], ["503345678", "SUNPACK INDUSTRIES", "PRIVATE LIMITED", 28304955.0, 0.0, 28304955.0, 45], ["503112345", "AURIC PACKAGING SOLUTIONS", "PRIVATE LIMITED", 27840402.75, 0.0, 27840402.75, 51], ["502523456", "ALPINE DAIRY PRODUCTS", "PROPRIETOR", 27805755.9, 0.0, 27805755.9, 51], ["502901234", "SAPPHIRE GRANITES", "PARTNERSHIP", 27780000.0, 0.0, 27780000.0, 50], ["505123456", "GOLDEN MILK DAIRY", "PROPRIETOR", 27717170.6, 0.0, 27717170.6, 34], ["503889012", "POWERLINE ELECTRICALS", "LLP", 27710000.0, 0.0, 27710000.0, 34], ["505356789", "MEDICARE LIFE SCIENCES", "PRIVATE LIMITED", 27635200.0, 0.0, 27635200.0, 34], ["504801234", "WESTPOINT PROPERTY DEVELOPERS", "PARTNERSHIP", 27551560.0, 0.0, 27551560.0, 34], ["504101234", "ORANGE BLOSSOM TEXTILES", "PARTNERSHIP", 27548160.0, 0.0, 27548160.0, 34], ["504078901", "TRANSINDIA CARRIERS", "PARTNERSHIP", 27051760.0, 0.0, 27051760.0, 34], ["505201234", "ZENITH ENGINEERING SOLUTIONS", "PARTNERSHIP", 27050400.0, 0.0, 27050400.0, 34], ["501323456", "PRAGATI METALS & MINERALS", "PARTNERSHIP", 26827592.4, 0.0, 26827592.4, 36], ["505145678", "URBAN MEDIA SOLUTIONS", "PRIVATE LIMITED", 26825966.0, 0.0, 26825966.0, 34], ["503801234", "ORBIT TEXTILE EXPORTS", "PARTNERSHIP", 26531560.0, 0.0, 26531560.0, 34], ["500334567", "SHIVNERI INFRA DEVELOPERS", "PARTNERSHIP", 26258400.0, 0.0, 26258400.0, 14], ["502756789", "ELITE PHARMA CARE", "PRIVATE LIMITED", 26152800.0, 0.0, 26152800.0, 51], ["503278901", "TRANSWAY CARGO MOVERS", "PARTNERSHIP", 25904250.0, 0.0, 25904250.0, 45], ["504401234", "ZENPRO ENGINEERING WORKS", "PARTNERSHIP", 25690400.0, 0.0, 25690400.0, 34], ["503501234", "WESTEND PROPERTY DEVELOPERS", "PARTNERSHIP", 25517000.0, 0.0, 25517000.0, 50], ["502301234", "BLUEWAVE MARINE EXPORTS", "PARTNERSHIP", 25517000.0, 0.0, 25517000.0, 50], ["504812345", "SILVERSTONE EXPORTS", "PRIVATE LIMITED", 25337140.0, 0.0, 25337140.0, 34], ["502478901", "OM SAI TRANSPORT CO", "PARTNERSHIP", 25034676.0, 0.0, 25034676.0, 51], ["502212345", "APEX METAL WORKS", "PRIVATE LIMITED", 24746280.0, 0.0, 24746280.0, 52], ["504323456", "GOLDEN HARVEST DAIRY", "PROPRIETOR", 24657170.6, 0.0, 24657170.6, 34], ["504689012", "POWERTRON ELECTRICALS", "LLP", 24310000.0, 0.0, 24310000.0, 34], ["505301234", "ARCADIA INTERIOR SOLUTIONS", "PARTNERSHIP", 24151560.0, 0.0, 24151560.0, 34], ["504001234", "WESTPOINT DEVELOPERS", "PARTNERSHIP", 24151560.0, 0.0, 24151560.0, 34], ["503912345", "GREENDALE DAIRY INDUSTRIES", "PRIVATE LIMITED", 23645308.5, 0.0, 23645308.5, 34], ["505423456", "FRESHFIELD ORGANICS", "PROPRIETOR", 23633770.6, 0.0, 23633770.6, 34], ["503823456", "FRESHLAND AGRO INDUSTRIES", "PROPRIETOR", 23633770.6, 0.0, 23633770.6, 34], ["505534567", "VECTOR HEAVY MACHINES", "LLP", 23512000.0, 0.0, 23512000.0, 20], ["505278901", "NORTHSTAR SHIPPING LINES", "PARTNERSHIP", 23489784.0, 0.0, 23489784.0, 34], ["505001234", "STONELINE GRANITES", "PARTNERSHIP", 23310400.0, 0.0, 23310400.0, 34], ["504056789", "MEDIWELL PHARMA CARE", "PRIVATE LIMITED", 23198200.0, 0.0, 23198200.0, 34], ["504278901", "OM SAI FREIGHT MOVERS", "PARTNERSHIP", 23149784.0, 0.0, 23149784.0, 34], ["505401234", "ORBITAL FASHION EXPORTS", "PARTNERSHIP", 23131560.0, 0.0, 23131560.0, 34], ["504856789", "MEDITECH PHARMA CARE", "PRIVATE LIMITED", 22858200.0, 0.0, 22858200.0, 34], ["504345678", "URBANEDGE PRINT MEDIA", "PRIVATE LIMITED", 22065966.0, 0.0, 22065966.0, 34], ["504501234", "ARCADIA HOME INTERIORS", "PARTNERSHIP", 21771560.0, 0.0, 21771560.0, 34], ["502823456", "FRESHROOT VEGETABLES", "PROPRIETOR", 21680655.9, 0.0, 21680655.9, 51], ["502345678", "PRIMEPACK CARTONS", "PRIVATE LIMITED", 21368949.0, 0.0, 21368949.0, 51], ["505212345", "AURORA FLEXIBLE PACKAGING", "PRIVATE LIMITED", 21280268.5, 0.0, 21280268.5, 34], ["503601234", "ZENFAB ENGINEERING", "PARTNERSHIP", 21270400.0, 0.0, 21270400.0, 34], ["504201234", "STONEWORLD GRANITES", "PARTNERSHIP", 21270400.0, 0.0, 21270400.0, 34], ["504623456", "FRESHFIELD AGRO INDUSTRIES", "PROPRIETOR", 21253770.6, 0.0, 21253770.6, 34], ["504712345", "GREENDALE MILK PRODUCTS", "PRIVATE LIMITED", 20925308.5, 0.0, 20925308.5, 34], ["503701234", "ARISTO INTERIORS", "PARTNERSHIP", 20751560.0, 0.0, 20751560.0, 34], ["503001234", "WESTERN HILLS DEVELOPERS", "PARTNERSHIP", 20517000.0, 0.0, 20517000.0, 50], ["502845678", "SUNGLOW PAPER INDUSTRIES", "PRIVATE LIMITED", 20348949.0, 0.0, 20348949.0, 51], ["504412345", "AURORA PLASTIC PACK", "PRIVATE LIMITED", 20260268.5, 0.0, 20260268.5, 34], ["503978901", "OM FAST FREIGHT", "PARTNERSHIP", 20089784.0, 0.0, 20089784.0, 34], ["504478901", "NORTHSTAR GLOBAL SHIPPING", "PARTNERSHIP", 20089784.0, 0.0, 20089784.0, 34], ["503401234", "STONEMAX GRANITES", "PARTNERSHIP", 20052000.0, 0.0, 20052000.0, 45], ["504601234", "ORBIT FASHION EXPORTS", "PARTNERSHIP", 19731560.0, 0.0, 19731560.0, 34], ["505012345", "GREENFARM DAIRY INDUSTRIES", "PRIVATE LIMITED", 19565308.5, 0.0, 19565308.5, 34], ["505078901", "OM SAI TRANSPORT SERVICES", "PARTNERSHIP", 19069784.0, 0.0, 19069784.0, 34], ["504901234", "ORCHID FABRICS INDIA", "PARTNERSHIP", 18371560.0, 0.0, 18371560.0, 34], ["500778901", "RIDDHI SIDHI ENTERPRISES", "PARTNERSHIP", 18072267.5, 0.0, 18072267.5, 14], ["503845678", "SUNRISE PACKAGING", "PRIVATE LIMITED", 17985966.0, 0.0, 17985966.0, 34], ["505445678", "SUNRISE PACK SOLUTIONS", "PRIVATE LIMITED", 17985966.0, 0.0, 17985966.0, 34], ["504145678", "SUNTECH PACKAGING", "PRIVATE LIMITED", 17967300.0, 0.0, 17967300.0, 34], ["505378901", "TRANSWORLD GLOBAL SHIPPING", "PARTNERSHIP", 17872100.0, 0.0, 17872100.0, 34], ["502412345", "OCEANIC FROZEN FOODS", "PRIVATE LIMITED", 17640402.75, 0.0, 17640402.75, 51], ["501545678", "GREENFIELD ORGANICS", "PROPRIETOR", 17603999.64, 0.0, 17603999.64, 36], ["503301234", "ORCHID TEXTILE EXPORTS", "PARTNERSHIP", 17115300.0, 0.0, 17115300.0, 45], ["502101234", "HORIZON PAPER MILLS", "PARTNERSHIP", 16931200.0, 0.0, 16931200.0, 52], ["504778901", "OM FASTLINE LOGISTICS", "PARTNERSHIP", 16689784.0, 0.0, 16689784.0, 34], ["505489012", "POWERTRONIC SYSTEMS", "LLP", 16300000.0, 0.0, 16300000.0, 20], ["504945678", "SUNSHINE PACK INDUSTRIES", "PRIVATE LIMITED", 16285966.0, 0.0, 16285966.0, 34], ["505601234", "WESTPOINT CONSTRUCTION", "PARTNERSHIP", 16206800.0, 0.0, 16206800.0, 20], ["503778901", "TRANSWORLD FREIGHT", "PARTNERSHIP", 16172100.0, 0.0, 16172100.0, 34], ["504212345", "GREENMEADOW DAIRY", "PRIVATE LIMITED", 16165308.5, 0.0, 16165308.5, 34], ["503067890", "BIOSHIELD HEALTHCARE", "PRIVATE LIMITED", 15972500.0, 0.0, 15972500.0, 50], ["503612345", "AURORA FLEX PACK", "PRIVATE LIMITED", 15160268.5, 0.0, 15160268.5, 34], ["502567890", "FUSION BIOTECH INDUSTRIES", "PRIVATE LIMITED", 14761950.0, 0.0, 14761950.0, 51], ["504645678", "SUNRISE FLEX PACKAGING", "PRIVATE LIMITED", 14585966.0, 0.0, 14585966.0, 34], ["504578901", "TRANSWORLD SHIPPING", "PARTNERSHIP", 14472100.0, 0.0, 14472100.0, 34], ["500556789", "VARDHAN EXPORT HOUSE", "PRIVATE LIMITED", 13818000.0, 0.0, 13818000.0, 14], ["504923456", "FRESHMART AGRO FOODS", "PROPRIETOR", 13463350.6, 0.0, 13463350.6, 34], ["503901234", "STONEAGE GRANITE WORKS", "PARTNERSHIP", 13450400.0, 0.0, 13450400.0, 34], ["503323456", "FRESHCROP AGRO PRODUCTS", "PROPRIETOR", 13279990.5, 0.0, 13279990.5, 45], ["505512345", "GREENDALE MILK FOODS", "PRIVATE LIMITED", 12909005.0, 0.0, 12909005.0, 20], ["503867890", "ALTITUDE ENGINEERS", "PRIVATE LIMITED", 12901300.0, 0.0, 12901300.0, 34], ["502867890", "ALPHACORE ENGINEERING", "PRIVATE LIMITED", 12721950.0, 0.0, 12721950.0, 51], ["502323456", "HIMALAYA FOOD PROCESSORS", "PROPRIETOR", 12260545.0, 0.0, 12260545.0, 50], ["504367890", "BIOCARE HEALTH SOLUTIONS", "PRIVATE LIMITED", 11881300.0, 0.0, 11881300.0, 34], ["505467890", "ALTITUDE INDUSTRIAL ENGINEERS", "PRIVATE LIMITED", 11201300.0, 0.0, 11201300.0, 34], ["504701234", "STONECREST GRANITES", "PARTNERSHIP", 11070400.0, 0.0, 11070400.0, 34], ["504967890", "ALPHATEC INDUSTRIES", "PRIVATE LIMITED", 10861300.0, 0.0, 10861300.0, 34], ["504123456", "FRESHBITE AGRO PRODUCTS", "PROPRIETOR", 10743350.6, 0.0, 10743350.6, 34], ["505167890", "BIOGEN HEALTHCARE", "PRIVATE LIMITED", 9841300.0, 0.0, 9841300.0, 34], ["505578901", "OM FASTLINE CARGO", "PARTNERSHIP", 9817520.0, 0.0, 9817520.0, 20], ["502367890", "URBANCREST DEVELOPERS", "PRIVATE LIMITED", 9661950.0, 0.0, 9661950.0, 51], ["504667890", "ALTITUDE TECH ENGINEERS", "PRIVATE LIMITED", 9501300.0, 0.0, 9501300.0, 34], ["503367890", "ALTRON ENGINEERING INDIA", "PRIVATE LIMITED", 8075250.0, 0.0, 8075250.0, 45], ["501101234", "SAMPURNA TEXTILES", "PRIVATE LIMITED", 7844760.0, 0.0, 7844760.0, 14], ["503567890", "BIOLIFE HEALTHCARE", "PRIVATE LIMITED", 7801300.0, 0.0, 7801300.0, 34], ["504167890", "ALPHATECH ENGINEERS", "PRIVATE LIMITED", 7801300.0, 0.0, 7801300.0, 34], ["505501234", "STONECREST GRANITE WORKS", "PARTNERSHIP", 7512000.0, 0.0, 7512000.0, 20], ["500112345", "AARAV INDUSTRIES", "PRIVATE LIMITED", 3442467.0, 0.0, 3442467.0, 14], ["501767890", "SILVERLINE TECH SERVICES", "PRIVATE LIMITED", 3220212.6, 0.0, 3220212.6, 36], ["502812345", "CRESTVIEW REALTORS", "PRIVATE LIMITED", 1086300.0, 0.0, 1086300.0, 51], ["503312345", "HORIZON REALTY VENTURES", "PRIVATE LIMITED", 823500.0, 0.0, 823500.0, 45], ["502890123", "INFINITY TECH PARKS", "PRIVATE LIMITED", 739000.0, 0.0, 739000.0, 50], ["502512345", "BRIGHTSTAR EDUCATION SERVICES", "PRIVATE LIMITED", 627300.0, 0.0, 627300.0, 51], ["502390123", "INNOVEX DIGITAL SOLUTIONS", "PRIVATE LIMITED", 498780.0, 0.0, 498780.0, 51], ["504912345", "HORIZON LAND DEVELOPERS", "PRIVATE LIMITED", 493000.0, 0.0, 493000.0, 34], ["502467890", "CLASSIC HANDLOOMS", "PROPRIETOR", 481988.25, 0.0, 481988.25, 51], ["503012345", "BRILLIANT EDUCATION HUB", "PRIVATE LIMITED", 465000.0, 0.0, 465000.0, 50], ["503090123", "GLOBETREK CONSULTANTS", "PRIVATE LIMITED", 439000.0, 0.0, 439000.0, 50], ["502767890", "ROYAL SPICES TRADING", "PROPRIETOR", 430975.5, 0.0, 430975.5, 51], ["504112345", "HORIZON URBAN DEVELOPERS", "PRIVATE LIMITED", 425000.0, 0.0, 425000.0, 34], ["503167890", "VISION MEDIA NETWORK", "PROPRIETOR", 379988.25, 0.0, 379988.25, 51], ["502312345", "TRIDENT INFRA BUILDERS", "PRIVATE LIMITED", 365000.0, 0.0, 365000.0, 50], ["504390123", "GLOBALCORE CONSULTING", "PRIVATE LIMITED", 339320.0, 0.0, 339320.0, 34], ["503267890", "SPICEWORLD TRADERS", "PROPRIETOR", 335272.5, 0.0, 335272.5, 45], ["503590123", "GLOBALBRIDGE CONSULTING", "PRIVATE LIMITED", 332520.0, 0.0, 332520.0, 34], ["502967890", "CLASSIC SWEETS MANUFACTURING", "PROPRIETOR", 322537.5, 0.0, 322537.5, 50], ["505190123", "GLOBAL EDGE CONSULTING", "PRIVATE LIMITED", 322320.0, 0.0, 322320.0, 34], ["503390123", "INNOVISTA TECH PARK", "PRIVATE LIMITED", 305100.0, 0.0, 305100.0, 45], ["504190123", "INNOTECH BUSINESS PARK", "PRIVATE LIMITED", 298520.0, 0.0, 298520.0, 34], ["504767890", "SWEETHEART FOODS", "PROPRIETOR", 287325.5, 0.0, 287325.5, 34], ["505267890", "VISION MEDIA ENTERPRISES", "PROPRIETOR", 287325.5, 0.0, 287325.5, 34], ["503967890", "SWEETHEART CONFECTIONERS", "PROPRIETOR", 287325.5, 0.0, 287325.5, 34], ["502667890", "VISIONARY MEDIA HOUSE", "PROPRIETOR", 277988.25, 0.0, 277988.25, 51], ["504990123", "INNOTECH CORPORATE PARK", "PRIVATE LIMITED", 264520.0, 0.0, 264520.0, 34], ["504467890", "VISIONARY MEDIA SOLUTIONS", "PROPRIETOR", 253325.5, 0.0, 253325.5, 34], ["505367890", "SPICY WORLD FOODS", "PROPRIETOR", 253317.0, 0.0, 253317.0, 34], ["504723456", "RAJPUT ENTERPRISES", "PROPRIETOR", 244800.0, 0.0, 244800.0, 34], ["503923456", "RAJPUTANA ELECTRONICS", "PROPRIETOR", 244800.0, 0.0, 244800.0, 34], ["502090123", "NOVASTAR ENERGY SOLUTIONS", "LLP", 244080.0, 0.0, 244080.0, 36], ["502590123", "GLOBALEDGE CONSULTING", "PRIVATE LIMITED", 243780.0, 0.0, 243780.0, 51], ["503423456", "RAJDHANI ELECTRICALS", "PROPRIETOR", 234000.0, 0.0, 234000.0, 45], ["503467890", "SWEETLAND FOOD INDUSTRIES", "PROPRIETOR", 226988.25, 0.0, 226988.25, 51], ["505067890", "SWEETCRUST BAKERS", "PROPRIETOR", 219325.5, 0.0, 219325.5, 34], ["504567890", "SPICY KING FOODS", "PROPRIETOR", 219317.0, 0.0, 219317.0, 34], ["503123456", "NAVKAR TRADERS", "PROPRIETOR", 214200.0, 0.0, 214200.0, 51], ["503623456", "NAVDURGA TRADERS", "PROPRIETOR", 210800.0, 0.0, 210800.0, 34], ["504867890", "SPICEBAY TRADERS", "PROPRIETOR", 198908.5, 0.0, 198908.5, 34], ["504690123", "INNOVISION SOFTWARE PARK", "PRIVATE LIMITED", 196520.0, 0.0, 196520.0, 34], ["503890123", "INNOTECH SOFTWARE PARK", "PRIVATE LIMITED", 196520.0, 0.0, 196520.0, 34], ["504267890", "SWEETWORLD BAKERS", "PROPRIETOR", 192125.5, 0.0, 192125.5, 34], ["503767890", "SPICY DELIGHT FOODS", "PROPRIETOR", 185317.0, 0.0, 185317.0, 34], ["503812345", "HILLTOP REAL ESTATE", "PRIVATE LIMITED", 180200.0, 0.0, 180200.0, 34], ["505412345", "HILLTOP REALTY DEVELOPERS", "PRIVATE LIMITED", 180200.0, 0.0, 180200.0, 34], ["504612345", "HILLVIEW REALTY", "PRIVATE LIMITED", 180200.0, 0.0, 180200.0, 34], ["505223456", "NAVKAR WHOLESALE TRADERS", "PROPRIETOR", 176800.0, 0.0, 176800.0, 34], ["505567890", "SWEET DELIGHT FOODS", "PROPRIETOR", 169015.0, 0.0, 169015.0, 20], ["503512345", "BRIGHTFUTURE ACADEMY", "PRIVATE LIMITED", 165000.0, 0.0, 165000.0, 50], ["504067890", "SPICEJET FOODS", "PROPRIETOR", 164908.5, 0.0, 164908.5, 34], ["505112345", "BRILLIANT FUTURE INSTITUTE", "PRIVATE LIMITED", 163200.0, 0.0, 163200.0, 34], ["502923456", "RUDRA ELECTRICALS", "PROPRIETOR", 160000.0, 0.0, 160000.0, 50], ["505523456", "RAJPUT BROTHERS TRADERS", "PROPRIETOR", 144000.0, 0.0, 144000.0, 20], ["504423456", "NAVJEEVAN TRADERS", "PROPRIETOR", 142800.0, 0.0, 142800.0, 34], ["504312345", "BRILLIANT MINDS ACADEMY", "PRIVATE LIMITED", 129200.0, 0.0, 129200.0, 34], ["502267890", "SILKROUTE APPARELS", "PROPRIETOR", 122537.5, 0.0, 122537.5, 50], ["503667890", "VISIONPLUS MEDIA", "PROPRIETOR", 117325.5, 0.0, 117325.5, 34], ["505490123", "INNOVISION TECH PARK", "PRIVATE LIMITED", 115600.0, 0.0, 115600.0, 20], ["502623456", "NAVRATNA TRADING CO", "PROPRIETOR", 112200.0, 0.0, 112200.0, 51], ["505023456", "RAJDHANI TRADERS", "PROPRIETOR", 108800.0, 0.0, 108800.0, 34], ["501212345", "ARYAV GLOBAL TRADERS", "PROPRIETOR", 82800.0, 0.0, 82800.0, 36], ["504223456", "RAJ ENTERPRISES", "PROPRIETOR", 74800.0, 0.0, 74800.0, 34], ["502423456", "KAVYA ENTERPRISES", "PROPRIETOR", 61200.0, 0.0, 61200.0, 51], ["500667890", "NEXA RETAIL SOLUTIONS", "LLP", 48300.0, 0.0, 48300.0, 14], ["503445678", "UNITY MAINTENANCE SERVICES", "PARTNERSHIP", 0.0, 384300.0, -384300.0, 45], ["503856789", "IMPERIAL TRADE LINKS", "PARTNERSHIP", 0.0, 0.0, 0.0, 34], ["503945678", "UNITY CLEANING SERVICES", "PARTNERSHIP", 0.0, 222360.0, -222360.0, 34], ["503334567", "DIGITECH SOLUTIONS INDIA", "LLP", 0.0, 1293750.0, -1293750.0, 45], ["503378901", "SHREE HARI MEDICAL SUPPLY", "PROPRIETOR", 0.0, 3892500.0, -3892500.0, 45], ["503490123", "GREENWOOD TIMBER TRADERS", "PRIVATE LIMITED", 0.0, 0.0, 0.0, 50], ["503489012", "SKYNET DIGITAL HUB", "LLP", 0.0, 11250000.0, -11250000.0, 50], ["503689012", "TECHFLOW INNOVATIONS", "LLP", 0.0, 19550000.0, -19550000.0, 34], ["501878901", "OMKAR PHARMA DISTRIBUTORS", "PARTNERSHIP", 0.0, 9954000.0, -9954000.0, 36], ["502334567", "NOVA ELECTRIC SYSTEMS", "LLP", 0.0, 987500.0, -987500.0, 50], ["505245678", "PRIME SECURITY FORCE", "PARTNERSHIP", 0.0, 222360.0, -222360.0, 34], ["502290123", "MAGNUS STEEL INDUSTRIES", "PRIVATE LIMITED", 0.0, 0.0, 0.0, 50], ["502289012", "VERTEX CONSULTANTS", "LLP", 0.0, 16250000.0, -16250000.0, 50], ["505290123", "RIVERDALE AGRO PRODUCTS", "PRIVATE LIMITED", 0.0, 0.0, 0.0, 34], ["505289012", "TECHNOVA SOLUTIONS", "LLP", 0.0, 13430000.0, -13430000.0, 34], ["505345678", "QUICKSHIFT FREIGHT", "LLP", 0.0, 460360.0, -460360.0, 34], ["505323456", "MAHAVEER GENERAL STORES", "PROPRIETOR", 0.0, 0.0, 0.0, 34], ["505389012", "CLOUDCORE TECHNOLOGIES", "LLP", 0.0, 14450000.0, -14450000.0, 34], ["505390123", "TRIMAX METAL INDUSTRIES", "PRIVATE LIMITED", 0.0, 0.0, 0.0, 34], ["505434567", "DIGITRON INFRA SOLUTIONS", "LLP", 0.0, 773500.0, -773500.0, 34], ["505456789", "IMPERIAL TRADE CORPORATION", "PARTNERSHIP", 0.0, 0.0, 0.0, 34], ["501434567", "ZENITH BIOTECH LABS", "PRIVATE LIMITED", 0.0, 567000.0, -567000.0, 36], ["500445678", "KRISHNA ALLOYS", "PROPRIETOR", 0.0, 91570.5, -91570.5, 14], ["500990123", "TRIVENI LOGISTICS", "PRIVATE LIMITED", 0.0, 0.0, 0.0, 14], ["500889012", "BLUELOTUS CONSULTING", "LLP", 0.0, 1750000.0, -1750000.0, 14], ["502223456", "SUNSHINE AGRO EXPORTS", "PROPRIETOR", 0.0, 0.0, 0.0, 52], ["501656789", "URBANEDGE REALTY PROJECTS", "LLP", 0.0, 0.0, 0.0, 36], ["502245678", "ORBITAL TECHNOLOGIES", "LLP", 0.0, 427000.0, -427000.0, 50], ["503356789", "IMPERIAL IMPEX SERVICES", "PARTNERSHIP", 0.0, 0.0, 0.0, 45], ["503878901", "SHREE SAI MEDICALS", "PROPRIETOR", 0.0, 2601000.0, -2601000.0, 34], ["503645678", "PRIMESECURE SERVICES", "PARTNERSHIP", 0.0, 154360.0, -154360.0, 34], ["503723456", "MAHAVEER FOOD SUPPLIERS", "PROPRIETOR", 0.0, 0.0, 0.0, 34], ["503690123", "RIVERSTONE AGRO MILLS", "PRIVATE LIMITED", 0.0, 0.0, 0.0, 34], ["503745678", "QUICKSHIFT TRANSPORT", "LLP", 0.0, 494360.0, -494360.0, 34], ["503789012", "CLOUDCORE CONSULTANTS", "LLP", 0.0, 12750000.0, -12750000.0, 34], ["503790123", "TRIMAX STEELS", "PRIVATE LIMITED", 0.0, 0.0, 0.0, 34], ["503834567", "DIGITALEDGE SOLUTIONS", "LLP", 0.0, 739500.0, -739500.0, 34], ["505545678", "UNITY FACILITY SERVICES", "PARTNERSHIP", 0.0, 130800.0, -130800.0, 20], ["505478901", "SHREE SAI WHOLESALE MART", "PROPRIETOR", 0.0, 1530000.0, -1530000.0, 20], ["503145678", "PRIMEGUARD SECURITY", "PARTNERSHIP", 0.0, 129540.0, -129540.0, 51], ["503056789", "HERITAGE SILK MILLS", "PARTNERSHIP", 0.0, 0.0, 0.0, 50], ["502990123", "GREENLAND TIMBER MART", "PRIVATE LIMITED", 0.0, 0.0, 0.0, 50], ["503078901", "SHREE RAM WHOLESALE", "PROPRIETOR", 0.0, 7325000.0, -7325000.0, 50], ["503034567", "FASTTRACK COURIER SERVICES", "LLP", 0.0, 1137500.0, -1137500.0, 50], ["503556789", "HERITAGE SILVER EXPORTS", "PARTNERSHIP", 0.0, 0.0, 0.0, 34], ["504090123", "TRISTAR STEEL FABRICATION", "PRIVATE LIMITED", 0.0, 0.0, 0.0, 34], ["504089012", "CLOUDWAY CONSULTANTS", "LLP", 0.0, 12070000.0, -12070000.0, 34], ["504023456", "MAHALAXMI TRADING CO", "PROPRIETOR", 0.0, 0.0, 0.0, 34], ["504045678", "QUICKLINK SUPPLY CHAIN", "LLP", 0.0, 324360.0, -324360.0, 34], ["503990123", "GREENFIELD TIMBER INDUSTRIES", "PRIVATE LIMITED", 0.0, 0.0, 0.0, 34], ["503989012", "SKYLINK IT PARK", "LLP", 0.0, 14450000.0, -14450000.0, 34], ["503578901", "SHREE KRISHNA WHOLESALE", "PROPRIETOR", 0.0, 3961000.0, -3961000.0, 34], ["503534567", "SPEEDTRACK EXPRESS", "LLP", 0.0, 987500.0, -987500.0, 50], ["502790123", "TRISHUL METAL INDUSTRIES", "PRIVATE LIMITED", 0.0, 0.0, 0.0, 51], ["502789012", "SKYBRIDGE CONSULTING", "LLP", 0.0, 14025000.0, -14025000.0, 51], ["502723456", "MARUTI COLD STORAGE", "PROPRIETOR", 0.0, 0.0, 0.0, 51], ["502745678", "QUICKMOVE LOGISTICS", "LLP", 0.0, 639540.0, -639540.0, 51], ["502690123", "RIVERDALE AGRO MILLS", "PRIVATE LIMITED", 0.0, 0.0, 0.0, 51], ["502689012", "TECHSPHERE INNOVATIONS", "LLP", 0.0, 21675000.0, -21675000.0, 51], ["504545678", "QUICKSHIFT TRANSPORTERS", "LLP", 0.0, 426360.0, -426360.0, 34], ["504589012", "CLOUDMAX CONSULTING", "LLP", 0.0, 9350000.0, -9350000.0, 34], ["504445678", "PRIMEWATCH SECURITY SERVICES", "PARTNERSHIP", 0.0, 222360.0, -222360.0, 34], ["504489012", "TECHVERSE INNOVATIONS", "LLP", 0.0, 12750000.0, -12750000.0, 34], ["504523456", "MAHAVEER GROCERY SUPPLIERS", "PROPRIETOR", 0.0, 0.0, 0.0, 34], ["504490123", "RIVERGOLD AGRO PRODUCTS", "PRIVATE LIMITED", 0.0, 0.0, 0.0, 34], ["504334567", "SPEEDLINE COURIER NETWORK", "LLP", 0.0, 807500.0, -807500.0, 34], ["504290123", "GREENFIELD PLYWOOD INDUSTRIES", "PRIVATE LIMITED", 0.0, 0.0, 0.0, 34], ["504378901", "SHREE RAM DISTRIBUTORS", "PROPRIETOR", 0.0, 3621000.0, -3621000.0, 34], ["504356789", "HERITAGE SILK EXPORTS", "PARTNERSHIP", 0.0, 0.0, 0.0, 34], ["503189012", "TECHNOVA INNOVATIONS", "LLP", 0.0, 19125000.0, -19125000.0, 51], ["503190123", "RIVERFRONT AGRO FOODS", "PRIVATE LIMITED", 0.0, 0.0, 0.0, 51], ["503223456", "MAHALAXMI GRAIN SUPPLIERS", "PROPRIETOR", 0.0, 0.0, 0.0, 51], ["503290123", "TRIDENT STEEL WORKS", "PRIVATE LIMITED", 0.0, 0.0, 0.0, 45], ["504289012", "SKYHIGH SOFTWARE HUB", "LLP", 0.0, 16150000.0, -16150000.0, 34], ["503245678", "RAPIDLINE LOGISTICS", "LLP", 0.0, 537540.0, -537540.0, 51], ["503289012", "CLOUDSYNC CONSULTING", "LLP", 0.0, 21375000.0, -21375000.0, 45], ["504178901", "SHREE GANESH MEDICALS", "PROPRIETOR", 0.0, 2261000.0, -2261000.0, 34], ["504245678", "UNITY HOUSEKEEPING SERVICES", "PARTNERSHIP", 0.0, 256360.0, -256360.0, 34], ["504134567", "DIGITALWAVE SYSTEMS", "LLP", 0.0, 637500.0, -637500.0, 34], ["504156789", "IMPERIAL OVERSEAS TRADERS", "PARTNERSHIP", 0.0, 0.0, 0.0, 34], ["504590123", "TRIMAX INDUSTRIAL STEELS", "PRIVATE LIMITED", 0.0, 0.0, 0.0, 34], ["504678901", "SHREE SAI WHOLESALE MART", "PROPRIETOR", 0.0, 2601000.0, -2601000.0, 34], ["502945678", "UNITY FACILITY MANAGEMENT", "PARTNERSHIP", 0.0, 327000.0, -327000.0, 50], ["502989012", "CLOUDNINE IT HUB", "LLP", 0.0, 6250000.0, -6250000.0, 50], ["502834567", "HYPERION DIGITAL LABS", "LLP", 0.0, 1823250.0, -1823250.0, 51], ["502445678", "RADIANT CABLE NETWORK", "PARTNERSHIP", 0.0, 282540.0, -282540.0, 51], ["504890123", "TRIDENT METAL WORKS", "PRIVATE LIMITED", 0.0, 0.0, 0.0, 34], ["502356789", "EASTERN SPICE TRADERS", "PARTNERSHIP", 0.0, 0.0, 0.0, 51], ["502378901", "SHAKTI CHEMICAL SUPPLIERS", "PROPRIETOR", 0.0, 3901500.0, -3901500.0, 51], ["504790123", "GREENWORLD TIMBER INDUSTRIES", "PRIVATE LIMITED", 0.0, 0.0, 0.0, 34], ["504823456", "MAHAVIR PROVISION STORES", "PROPRIETOR", 0.0, 0.0, 0.0, 34], ["504845678", "QUICKMOVE SUPPLY CHAIN", "LLP", 0.0, 290360.0, -290360.0, 34], ["504889012", "CLOUDPOINT CONSULTING", "LLP", 0.0, 14110000.0, -14110000.0, 34], ["504745678", "UNITY FACILITY SOLUTIONS", "PARTNERSHIP", 0.0, 188360.0, -188360.0, 34], ["504789012", "SKYNET IT SOLUTIONS", "LLP", 0.0, 11050000.0, -11050000.0, 34], ["502856789", "KESAR IMPEX SOLUTIONS", "PARTNERSHIP", 0.0, 0.0, 0.0, 51], ["502878901", "SHANTI MEDICAL AGENCIES", "PROPRIETOR", 0.0, 4825000.0, -4825000.0, 50], ["504656789", "IMPERIAL GLOBAL TRADE", "PARTNERSHIP", 0.0, 0.0, 0.0, 34], ["504634567", "DIGITECH INFRA SOLUTIONS", "LLP", 0.0, 739500.0, -739500.0, 34], ["502556789", "HERITAGE CRAFT EXPORTS", "PARTNERSHIP", 0.0, 0.0, 0.0, 51], ["502489012", "SKYNET IT SERVICES", "LLP", 0.0, 11475000.0, -11475000.0, 51], ["504956789", "IMPERIAL GLOBAL EXPORTS", "PARTNERSHIP", 0.0, 0.0, 0.0, 34], ["504978901", "SHREE BALAJI MEDICAL SUPPLY", "PROPRIETOR", 0.0, 1921000.0, -1921000.0, 34], ["502645678", "PINNACLE SECURITY SERVICES", "PARTNERSHIP", 0.0, 261960.0, -261960.0, 74], ["504934567", "DIGITAL EDGE TECHNOLOGIES", "LLP", 0.0, 909500.0, -909500.0, 34], ["502534567", "RAPIDEX COURIER NETWORK", "LLP", 0.0, 1517250.0, -1517250.0, 51], ["502490123", "EVERGREEN TIMBERS", "PRIVATE LIMITED", 0.0, 0.0, 0.0, 51], ["502578901", "SHREE BALAJI DISTRIBUTORS", "PROPRIETOR", 0.0, 6451500.0, -6451500.0, 51], ["505089012", "SKYLINE SOFTWARE HUB", "LLP", 0.0, 9690000.0, -9690000.0, 34], ["505178901", "SHREE RAM DISTRIBUTION", "PROPRIETOR", 0.0, 4301000.0, -4301000.0, 34], ["505156789", "HERITAGE SILK INDUSTRIES", "PARTNERSHIP", 0.0, 0.0, 0.0, 34], ["505134567", "SPEEDLINK EXPRESS NETWORK", "LLP", 0.0, 841500.0, -841500.0, 34], ["505090123", "GREENPLY INDUSTRIES", "PRIVATE LIMITED", 0.0, 0.0, 0.0, 34], ["505045678", "UNITY CLEANING SOLUTIONS", "PARTNERSHIP", 0.0, 324360.0, -324360.0, 34], ["500223456", "MEHTA AGRO FOODS", "PROPRIETOR", 0.0, 0.0, 0.0, 14], ["505589012", "SKYNET SOFTWARE SERVICES", "LLP", 0.0, 6500000.0, -6500000.0, 20], ["505590123", "GREENWOOD TIMBER MART", "PRIVATE LIMITED", 0.0, 0.0, 0.0, 20]];
+
+// ── CONSTANTS ─────────────────────────────────────────────────────────────
+const ENTITY = [
+  {name:'PRIVATE LIMITED', short:'Pvt.Ltd.',  count:4762, cr:2108089604.1, dr:567000,     cr_c:4726, dr_c:36,   color:'#00e5a0'},
+  {name:'PARTNERSHIP',     short:'Partner.',   count:3683, cr:1981848062.6, dr:13060660,   cr_c:3118, dr_c:565,  color:'#4da6ff'},
+  {name:'LLP',             short:'LLP',        count:2795, cr:1254600980,   dr:306270130,  cr_c:1097, dr_c:1698, color:'#ff5c7a'},
+  {name:'PROPRIETOR',      short:'Propri.',    count:2798, cr:323879528.6,  dr:49284070.5, cr_c:2279, dr_c:519,  color:'#ffc532'},
+];
+const TOP_CR = ALL_ACCOUNTS.filter(r=>r[3]>0).slice(0,15);
+const TOP_DR = ALL_ACCOUNTS.filter(r=>r[4]>0).sort((a,b)=>b[4]-a[4]).slice(0,15);
+const DIST = [{r:'₹0 Nil',c:1735,col:'#ffc532'},{r:'< ₹10K',c:2856,col:'#4da6ff'},{r:'₹10K–₹1L',c:1378,col:'#e054f0'},{r:'₹1L–₹10L',c:6361,col:'#00e5a0'},{r:'₹10L–₹1Cr',c:1708,col:'#a78bfa'}];
+
+// ── HELPERS ───────────────────────────────────────────────────────────────
+const fmt = n => {
+  if(n>=1e7) return '₹'+(n/1e7).toFixed(2)+' Cr';
+  if(n>=1e5) return '₹'+(n/1e5).toFixed(2)+' L';
+  if(n>=1e3) return '₹'+(n/1e3).toFixed(1)+'K';
+  if(n<0)    return '-'+fmt(-n);
+  return '₹'+n.toFixed(0);
+};
+
+const CHART_DEFAULTS = {
+  plugins: { legend:{ labels:{color:'#556080',font:{family:'Syne',size:11}} }, tooltip:{backgroundColor:'#0c1428',borderColor:'#1a2540',borderWidth:1,titleColor:'#556080',bodyColor:'#e8edf8',padding:10,titleFont:{family:'Syne'},bodyFont:{family:'Fira Code'}} },
+  scales: { x:{ticks:{color:'#556080',font:{family:'Syne',size:10}},grid:{color:'#1a2540'},border:{color:'#1a2540'}}, y:{ticks:{color:'#556080',font:{family:'Fira Code',size:10}},grid:{color:'#1a2540'},border:{color:'transparent'}} }
+};
+
+// ── CHARTS INIT ───────────────────────────────────────────────────────────
+let charts = {};
+
+function mkChart(id, cfg) {
+  if(charts[id]) charts[id].destroy();
+  const ctx = document.getElementById(id);
+  if(!ctx) return;
+  charts[id] = new Chart(ctx, cfg);
+  return charts[id];
+}
+
+function initOverview() {
+  // Entity Bar
+  mkChart('chartEntityBar', {type:'bar', data:{
+    labels: ENTITY.map(e=>e.short),
+    datasets:[
+      {label:'Credit',data:ENTITY.map(e=>e.cr),backgroundColor:'#00e5a0cc',borderRadius:5,borderSkipped:false},
+      {label:'Debit', data:ENTITY.map(e=>e.dr),backgroundColor:'#ff5c7acc',borderRadius:5,borderSkipped:false},
+    ]
+  }, options:{...CHART_DEFAULTS, responsive:true, plugins:{...CHART_DEFAULTS.plugins,legend:{labels:{color:'#556080',font:{family:'Syne',size:11}}}}, scales:{x:{...CHART_DEFAULTS.scales.x},y:{...CHART_DEFAULTS.scales.y, ticks:{...CHART_DEFAULTS.scales.y.ticks, callback:v=>fmt(v)}}}}});
+
+  // Donut
+  mkChart('chartDonut',{type:'doughnut',data:{labels:['Credit','Debit'],datasets:[{data:[11220,2818],backgroundColor:['#00e5a0cc','#ff5c7acc'],borderColor:['#00e5a0','#ff5c7a'],borderWidth:1,hoverOffset:6}]},options:{responsive:true,cutout:'68%',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.label}: ${c.raw.toLocaleString()}`}}}}});
+
+  // Dist
+  mkChart('chartDist',{type:'bar',data:{labels:DIST.map(d=>d.r),datasets:[{data:DIST.map(d=>d.c),backgroundColor:DIST.map(d=>d.col+'cc'),borderColor:DIST.map(d=>d.col),borderWidth:1,borderRadius:6,borderSkipped:false}]},options:{...CHART_DEFAULTS,responsive:true,plugins:{...CHART_DEFAULTS.plugins,legend:{display:false}},scales:{x:{...CHART_DEFAULTS.scales.x},y:{...CHART_DEFAULTS.scales.y}}}});
+
+  // Pie
+  mkChart('chartPie',{type:'pie',data:{labels:ENTITY.map(e=>e.short),datasets:[{data:ENTITY.map(e=>e.count),backgroundColor:ENTITY.map(e=>e.color+'99'),borderColor:ENTITY.map(e=>e.color),borderWidth:1}]},options:{responsive:true,plugins:{legend:{labels:{color:'#556080',font:{family:'Syne',size:11}}},tooltip:{backgroundColor:'#0c1428',borderColor:'#1a2540',borderWidth:1,bodyFont:{family:'Fira Code'}}}}});
+}
+
+let crTop=5,drTop=5;
+function initCredits(n) {
+  const data = TOP_CR.slice(0,n);
+  mkChart('chartTopCR',{type:'bar',data:{labels:data.map(r=>r[1]),datasets:[{label:'Credit Amount',data:data.map(r=>r[3]),backgroundColor:data.map((_,i)=>`rgba(0,229,160,${1-i*0.055})`),borderRadius:[0,6,6,0],borderSkipped:false}]},options:{...CHART_DEFAULTS,indexAxis:'y',responsive:true,plugins:{...CHART_DEFAULTS.plugins,legend:{display:false}},scales:{x:{...CHART_DEFAULTS.scales.x,ticks:{...CHART_DEFAULTS.scales.x.ticks,callback:v=>fmt(v)}},y:{...CHART_DEFAULTS.scales.y}}}});
+  const top3 = document.getElementById('top3cr');
+  top3.innerHTML = TOP_CR.slice(0,3).map((r,i)=>`
+    <div class="card" style="border-top:3px solid var(--accent)">
+      <div style="font-size:9px;color:var(--accent);letter-spacing:2px;margin-bottom:8px">#${i+1} TOP CREDIT</div>
+      <div style="font-weight:700;margin-bottom:4px;font-size:12px">${r[1]}</div>
+      <div style="font-size:22px;font-weight:800;color:var(--accent);font-family:'Fira Code'">${fmt(r[3])}</div>
+      <div style="margin-top:8px"><span class="badge" style="background:#00e5a022;color:#00e5a0;border:1px solid #00e5a044">${r[2]}</span></div>
+    </div>`).join('');
+}
+function initDebits(n) {
+  const data = TOP_DR.slice(0,n);
+  mkChart('chartTopDR',{type:'bar',data:{labels:data.map(r=>r[1]),datasets:[{label:'Debit Amount',data:data.map(r=>r[4]),backgroundColor:data.map((_,i)=>`rgba(255,92,122,${1-i*0.05})`),borderRadius:[0,6,6,0],borderSkipped:false}]},options:{...CHART_DEFAULTS,indexAxis:'y',responsive:true,plugins:{...CHART_DEFAULTS.plugins,legend:{display:false}},scales:{x:{...CHART_DEFAULTS.scales.x,ticks:{...CHART_DEFAULTS.scales.x.ticks,callback:v=>fmt(v)}},y:{...CHART_DEFAULTS.scales.y}}}});
+  const top3 = document.getElementById('top3dr');
+  top3.innerHTML = TOP_DR.slice(0,3).map((r,i)=>`
+    <div class="card" style="border-top:3px solid var(--red)">
+      <div style="font-size:9px;color:var(--red);letter-spacing:2px;margin-bottom:8px">#${i+1} TOP DEBIT</div>
+      <div style="font-weight:700;margin-bottom:4px;font-size:12px">${r[1]}</div>
+      <div style="font-size:22px;font-weight:800;color:var(--red);font-family:'Fira Code'">${fmt(r[4])}</div>
+      <div style="margin-top:8px"><span class="badge" style="background:#ff5c7a22;color:#ff5c7a;border:1px solid #ff5c7a44">${r[2]}</span></div>
+    </div>`).join('');
+}
+function initEntities() {
+  const ec = document.getElementById('entityCards');
+  ec.innerHTML = ENTITY.map(e=>{
+    const net=e.cr-e.dr, ratio=(e.cr/(e.cr+e.dr)*100).toFixed(1);
+    return `<div class="entity-card" style="border-left-color:${e.color}">
+      <div class="entity-name" style="color:${e.color}">${e.name}
+        <span class="badge" style="background:${e.color}22;color:${e.color};border:1px solid ${e.color}44;float:right">${e.count.toLocaleString()} entries</span>
+      </div>
+      <div class="entity-stats">
+        <div class="entity-stat"><div class="el">Total CR</div><div class="ev" style="color:var(--accent)">${fmt(e.cr)}</div></div>
+        <div class="entity-stat"><div class="el">Total DR</div><div class="ev" style="color:var(--red)">${fmt(e.dr)}</div></div>
+        <div class="entity-stat"><div class="el">Net Balance</div><div class="ev" style="color:${net>=0?'var(--accent)':'var(--red)'}">${fmt(net)}</div></div>
+      </div>
+      <div class="bar-bg"><div class="bar-fill" style="width:${ratio}%;background:${e.color}"></div></div>
+      <div class="entity-foot">
+        <span>CR entries: <strong style="color:var(--accent)">${e.cr_c.toLocaleString()}</strong></span>
+        <span>DR entries: <strong style="color:var(--red)">${e.dr_c.toLocaleString()}</strong></span>
+        <span>CR ratio: <strong style="color:${e.color}">${ratio}%</strong></span>
+      </div>
+    </div>`;
+  }).join('');
+  mkChart('chartEntityCompare',{type:'bar',data:{labels:ENTITY.map(e=>e.short),datasets:[{label:'Credit',data:ENTITY.map(e=>e.cr),backgroundColor:'#00e5a0cc',borderRadius:4,borderSkipped:false},{label:'Debit',data:ENTITY.map(e=>e.dr),backgroundColor:'#ff5c7acc',borderRadius:4,borderSkipped:false}]},options:{...CHART_DEFAULTS,responsive:true,scales:{x:{...CHART_DEFAULTS.scales.x},y:{...CHART_DEFAULTS.scales.y,ticks:{...CHART_DEFAULTS.scales.y.ticks,callback:v=>fmt(v)}}}}});
+}
+function initDistribution() {
+  mkChart('chartDistBar',{type:'bar',data:{labels:DIST.map(d=>d.r),datasets:[{data:DIST.map(d=>d.c),backgroundColor:DIST.map(d=>d.col+'bb'),borderColor:DIST.map(d=>d.col),borderWidth:1,borderRadius:6,borderSkipped:false}]},options:{...CHART_DEFAULTS,responsive:true,plugins:{...CHART_DEFAULTS.plugins,legend:{display:false}},scales:{x:{...CHART_DEFAULTS.scales.x},y:{...CHART_DEFAULTS.scales.y}}}});
+  mkChart('chartEntityPie',{type:'pie',data:{labels:ENTITY.map(e=>e.name),datasets:[{data:ENTITY.map(e=>e.count),backgroundColor:ENTITY.map(e=>e.color+'99'),borderColor:ENTITY.map(e=>e.color),borderWidth:1}]},options:{responsive:true,plugins:{legend:{labels:{color:'#556080',font:{family:'Syne',size:11}}},tooltip:{backgroundColor:'#0c1428',borderColor:'#1a2540',borderWidth:1,bodyFont:{family:'Fira Code'},callbacks:{label:c=>`${c.label}: ${c.raw.toLocaleString()} entries`}}}}});
+}
+
+// ── TABLE ─────────────────────────────────────────────────────────────────
+let tblFilter='ALL', tblSearch='', tblSort='cr', tblDir=-1;
+const STATUS_COLORS={LLP:'#ff5c7a','PRIVATE LIMITED':'#00e5a0','PARTNERSHIP':'#4da6ff','PROPRIETOR':'#ffc532'};
+
+function renderTable() {
+  let data = ALL_ACCOUNTS.filter(r=> {
+    if(tblFilter!=='ALL' && r[2]!==tblFilter) return false;
+    if(tblSearch && !r[1].toLowerCase().includes(tblSearch) && !r[0].includes(tblSearch)) return false;
+    return true;
+  });
+  const colMap={idx:0,acct:0,name:1,status:2,cr:3,dr:4,net:5,entries:6};
+  const ci=colMap[tblSort]??3;
+  data.sort((a,b)=>tblDir*(a[ci]>b[ci]?1:a[ci]<b[ci]?-1:0));
+  const tbody=document.getElementById('tableBody');
+  tbody.innerHTML=data.map((r,i)=>{
+    const col=STATUS_COLORS[r[2]]||'#4da6ff';
+    const netCol=r[5]>=0?'#00e5a0':'#ff5c7a';
+    return `<tr>
+      <td style="color:var(--muted);font-family:'Fira Code'">${i+1}</td>
+      <td style="font-family:'Fira Code';color:var(--muted)">${r[0]}</td>
+      <td style="font-weight:600">${r[1]}</td>
+      <td><span class="badge" style="background:${col}22;color:${col};border:1px solid ${col}44">${r[2]==='PRIVATE LIMITED'?'PVT.LTD':r[2]}</span></td>
+      <td style="color:#00e5a0;font-family:'Fira Code';font-weight:600">${r[3]>0?fmt(r[3]):'—'}</td>
+      <td style="color:#ff5c7a;font-family:'Fira Code';font-weight:600">${r[4]>0?fmt(r[4]):'—'}</td>
+      <td style="color:${netCol};font-family:'Fira Code';font-weight:700">${fmt(r[5])}</td>
+      <td style="color:var(--muted);font-family:'Fira Code'">${r[6]}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('tbl-count').textContent=`Showing ${data.length} of 360 accounts`;
+}
+function setFilter(f,btn){tblFilter=f;document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');renderTable();}
+function filterTable(){tblSearch=document.getElementById('searchInput').value.toLowerCase();renderTable();}
+function sortBy(col){if(tblSort===col)tblDir*=-1;else{tblSort=col;tblDir=-1;}renderTable();}
+
+// ── TOP-N ─────────────────────────────────────────────────────────────────
+function setCrTop(n,btn){document.querySelectorAll('#panel-credits .topn-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');initCredits(n);}
+function setDrTop(n,btn){document.querySelectorAll('#panel-debits .topn-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');initDebits(n);}
+
+// ── TAB SWITCHING ─────────────────────────────────────────────────────────
+const INITED={};
+function switchTab(name,btn){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('panel-'+name).classList.add('active');
+  btn.classList.add('active');
+  if(!INITED[name]){
+    INITED[name]=true;
+    if(name==='overview')     initOverview();
+    if(name==='credits')      initCredits(5);
+    if(name==='debits')       initDebits(5);
+    if(name==='entities')     initEntities();
+    if(name==='distribution') initDistribution();
+    if(name==='alldata')      renderTable();
+  }
+}
+
+// ── BOOT ──────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded',()=>{
+  INITED['overview']=true;
+  initOverview();
+});
+</script>
+</body>
+</html>
